@@ -1,362 +1,2 @@
-#!/usr/bin/env python3
-# Front page: 23 November 2026 â€” ported from newsimg-20261120 baseline v3 (style preserved).
-"""Render the 23 November 2026 front page to entry.png (1024x1024, <1 MiB).
-
-Draws with Pillow at 4x supersample, then downscales. Deterministic: no
-randomness, no network, no wall clock.
-"""
-from PIL import Image, ImageDraw, ImageFont
-import os, math
-
-S = 4                      # supersample factor
-W = H = 1024
-PX = W * S                 # canvas edge at supersample
-
-# ---------- palette (warm ivory paper, slate ink, burnt-orange accent) ------
-PAPER = (247, 242, 228)
-INK = (28, 39, 51)
-RED = (168, 55, 38)
-TEAL = (41, 96, 92)
-GOLD = (178, 129, 40)
-MUTED = (94, 84, 66)
-CARD = (252, 249, 238)
-RULE = (206, 196, 172)
-NAVY = (18, 28, 44)
-
-FD = "/usr/share/fonts/truetype"
-_SERIF = FD + "/dejavu/DejaVuSerif.ttf"
-_SERIF_B = FD + "/dejavu/DejaVuSerif-Bold.ttf"
-_SERIF_I = FD + "/dejavu/DejaVuSerif-Italic.ttf"
-if not os.path.exists(_SERIF_I):
-    _SERIF_I = FD + "/liberation/LiberationSerif-Italic.ttf"
-
-_fonts = {}
-
-
-def F(path, size):
-    key = (path, size)
-    if key not in _fonts:
-        _fonts[key] = ImageFont.truetype(path, size)
-    return _fonts[key]
-
-
-def serif(sz):
-    return F(_SERIF, sz * S)
-
-
-def serifb(sz):
-    return F(_SERIF_B, sz * S)
-
-
-def serifit(sz):
-    return F(_SERIF_I, sz * S)
-
-
-img = Image.new("RGB", (PX, PX), PAPER)
-d = ImageDraw.Draw(img)
-
-M = 22 * S  # page margin
-
-
-def wrap(text, font, maxw):
-    words, lines, cur = text.split(), [], ""
-    for w in words:
-        t = (cur + " " + w).strip()
-        if d.textlength(t, font=font) <= maxw:
-            cur = t
-        else:
-            lines.append(cur)
-            cur = w
-    if cur:
-        lines.append(cur)
-    return lines
-
-
-def para(x, y, text, font, maxw, fill, lh=None):
-    lh = lh or int(font.size * 1.22)
-    for line in wrap(text, font, maxw):
-        d.text((x, y), line, font=font, fill=fill)
-        y += lh
-    return y
-
-
-def tag(x, y, num, city, field):
-    d.text((x, y), "%d Â· %s Â· %s" % (num, city, field), font=serifb(11), fill=RED)
-    return y + 14 * S
-
-
-def card(x, y, w, h):
-    d.rectangle([x, y, x + w, y + h], fill=CARD, outline=RULE, width=S)
-
-
-# ================================================================ header ====
-d.rectangle([0, 0, PX, 6 * S], fill=RED)
-d.text((M, 14 * S), "THE WORLD IN ONE DAY", font=serifb(13), fill=INK)
-right = "MONDAY'S NEWS Â· ONE PAGE Â· 7 STORIES Â· 7 REGIONS"
-d.text((PX - M - d.textlength(right, font=serifb(13)), 14 * S), right,
-       font=serifb(13), fill=INK)
-d.line([M, 34 * S, PX - M, 34 * S], fill=INK, width=S)
-
-# masthead
-date_f = serifb(64)
-dtxt = "Monday 23 November 2026"
-dw = d.textlength(dtxt, font=date_f)
-d.text(((PX - dw) / 2, 40 * S), dtxt, font=date_f, fill=INK)
-sub = "Iran hits US bases in the Gulf  Â·  COP31 collapses  Â·  War spreads to the Libyan coast"
-sf = serifit(15)
-d.text(((PX - d.textlength(sub, font=sf)) / 2, 112 * S), sub, font=sf, fill=RED)
-d.line([M, 134 * S, PX - M, 134 * S], fill=RULE, width=S)
-
-# ============================================================= stat band ====
-stats = [
-    ("COP31 collapses", "divided world leaves Antalya with no climate deal (Guardian, BBC)"),
-    ("24 killed", "in Indonesia confectionery-factory fire; dozens missing (Guardian)"),
-    ("893 kg", "of cocaine seized by Met Police hidden in orange boxes (Guardian)"),
-    ("1,000+", "Russian military suicides in the Ukraine war, leaked data shows (Guardian)"),
-    ("Â£750,000", "paid to help a Turkish woman get a passport, court told (Guardian)"),
-    ("2 ships hit", "by Ukrainian naval drones off Libya, Kyiv confirms (Guardian, BBC)"),
-]
-sy = 142 * S
-sw = (PX - 2 * M) / 6
-for i, (big, small) in enumerate(stats):
-    x = M + i * sw
-    d.text((x, sy), big, font=serifb(15), fill=RED if i % 2 else INK)
-    yy = sy + 22 * S
-    for ln in wrap(small, serif(9.5), sw - 8 * S)[:3]:
-        d.text((x, yy), ln, font=serif(9.5), fill=MUTED)
-        yy += 12 * S
-d.line([M, sy + 62 * S, PX - M, sy + 62 * S], fill=RULE, width=S)
-
-# ============================================================= hero row =====
-hy = 212 * S
-hh = 210 * S
-cw = (PX - 2 * M - 2 * 10 * S) / 3
-
-# hero 1: Gulf strikes â€” burning horizon over a dark sea, smoke columns, base towers
-x0 = M
-card(x0, hy, cw, hh)
-d.rectangle([x0 + 8 * S, hy + 8 * S, x0 + cw - 8 * S, hy + 88 * S], fill=NAVY)
-# burning horizon glow
-d.rectangle([x0 + 8 * S, hy + 62 * S, x0 + cw - 8 * S, hy + 88 * S], fill=(46, 34, 30))
-d.rectangle([x0 + 8 * S, hy + 70 * S, x0 + cw - 8 * S, hy + 88 * S], fill=(94, 40, 24))
-d.rectangle([x0 + 8 * S, hy + 78 * S, x0 + cw - 8 * S, hy + 88 * S], fill=(168, 55, 38))
-d.rectangle([x0 + 8 * S, hy + 84 * S, x0 + cw - 8 * S, hy + 88 * S], fill=(232, 140, 60))
-# fire bursts on the horizon
-for (gx, gy, gr) in [(70, 66, 12), (200, 60, 16), (262, 72, 10)]:
-    d.ellipse([x0 + gx * S - gr * S, hy + gy * S - gr * S,
-               x0 + gx * S + gr * S, hy + gy * S + gr * S], fill=(240, 190, 90))
-    d.ellipse([x0 + gx * S - gr * S * 0.5, hy + gy * S - gr * S * 0.5,
-               x0 + gx * S + gr * S * 0.5, hy + gy * S + gr * S * 0.5], fill=(214, 88, 52))
-# smoke columns
-for (sx, top) in [(80, 18), (215, 12), (275, 26)]:
-    d.polygon([(x0 + (sx - 4) * S, hy + 84 * S), (x0 + (sx + 4) * S, hy + 84 * S),
-               (x0 + (sx + 12) * S, hy + top * S), (x0 + (sx - 2) * S, hy + top * S)],
-              fill=(40, 52, 72))
-# base towers (US bases on the coast)
-for (tx, th) in [(120, 30), (150, 40), (178, 26)]:
-    d.rectangle([x0 + tx * S, hy + 84 * S - th * S, x0 + (tx + 12) * S, hy + 84 * S],
-                fill=(14, 22, 36))
-    d.rectangle([x0 + (tx + 5) * S, hy + 84 * S - th * S, x0 + (tx + 7) * S, hy + 84 * S],
-                fill=(178, 129, 40))
-# rising missile trails
-for (bx, by, ex, ey) in [(30, 84, 54, 26), (300, 84, 322, 38)]:
-    d.line([x0 + bx * S, hy + by * S, x0 + ex * S, hy + ey * S],
-           fill=(232, 140, 60), width=2 * S)
-    d.ellipse([x0 + ex * S - 4 * S, hy + ey * S - 8 * S,
-               x0 + ex * S + 4 * S, hy + ey * S], fill=(240, 190, 90))
-y = tag(x0 + 8 * S, hy + 94 * S, 1, "THE GULF", "WAR")
-d.text((x0 + 8 * S, y), "Iran hits US bases and civilian", font=serifb(13.5), fill=INK)
-d.text((x0 + 8 * S, y + 17 * S), "sites in the Gulf after a lull", font=serifb(13.5), fill=INK)
-para(x0 + 8 * S, y + 38 * S,
-     "Strikes end days of calm; American bases and civilian sites in the Gulf come under fire.",
-     serif(9.5), cw - 16 * S, MUTED)
-para(x0 + 8 * S, hy + hh - 26 * S, "(Al Jazeera)", serifit(8.5), cw, MUTED)
-
-# hero 2: COP31 collapse â€” broken table gavel over the COP31 ring
-x0 = M + cw + 10 * S
-card(x0, hy, cw, hh)
-d.rectangle([x0 + 8 * S, hy + 8 * S, x0 + cw - 8 * S, hy + 88 * S], fill=(233, 224, 196))
-cx, cy, r = x0 + cw / 2, hy + 46 * S, 26 * S
-d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=GOLD, width=3 * S)
-for k in range(10):
-    a = k * math.pi / 5
-    px_, py_ = cx + (r + 7 * S) * math.cos(a), cy + (r + 7 * S) * math.sin(a)
-    d.ellipse([px_ - 4 * S, py_ - 4 * S, px_ + 4 * S, py_ + 4 * S], fill=INK)
-d.text((cx - 24 * S, cy - 12 * S), "COP31", font=serifb(13), fill=RED)
-# crack through the ring
-d.line([cx - 6 * S, hy + 8 * S, cx + 10 * S, hy + 88 * S], fill=PAPER, width=3 * S)
-d.line([cx - 6 * S, hy + 8 * S, cx + 10 * S, hy + 88 * S], fill=RED, width=S)
-# broken gavel
-d.line([x0 + 30 * S, hy + 78 * S, x0 + 62 * S, hy + 52 * S], fill=(120, 80, 40), width=4 * S)
-d.rectangle([x0 + 26 * S, hy + 80 * S, x0 + 54 * S, hy + 84 * S], fill=(120, 80, 40))
-d.line([x0 + cw - 58 * S, hy + 50 * S, x0 + cw - 26 * S, hy + 80 * S], fill=(120, 80, 40), width=4 * S)
-y = tag(x0 + 8 * S, hy + 94 * S, 2, "ANTALYA", "CLIMATE")
-d.text((x0 + 8 * S, y), "COP31 climate talks collapse,", font=serifb(13.5), fill=INK)
-d.text((x0 + 8 * S, y + 17 * S), "a divided world leaves no deal", font=serifb(13.5), fill=INK)
-para(x0 + 8 * S, y + 38 * S,
-     "Talks end in failure with no fossil-fuel wording; host and allies blame the divide.",
-     serif(9.5), cw - 16 * S, MUTED)
-para(x0 + 8 * S, hy + hh - 26 * S, "(Guardian, BBC)", serifit(8.5), cw, MUTED)
-
-# hero 3: naval drones off Libya â€” dark sea, wakes, two struck ships
-x0 = M + 2 * (cw + 10 * S)
-card(x0, hy, cw, hh)
-d.rectangle([x0 + 8 * S, hy + 8 * S, x0 + cw - 8 * S, hy + 88 * S], fill=(16, 40, 52))
-d.polygon([(x0 + 8 * S, hy + 88 * S), (x0 + cw - 8 * S, hy + 88 * S),
-           (x0 + cw - 8 * S, hy + 26 * S), (x0 + 8 * S, hy + 40 * S)], fill=(20, 52, 64))
-# wakes
-for wx in (110, 250):
-    d.line([x0 + wx * S, hy + 88 * S, x0 + (wx - 20) * S, hy + 30 * S], fill=(120, 170, 180), width=S)
-    d.line([x0 + wx * S, hy + 88 * S, x0 + (wx + 20) * S, hy + 30 * S], fill=(120, 170, 180), width=S)
-# ships
-for (sx, sy2) in [(100, 34), (240, 30)]:
-    d.polygon([(x0 + sx * S, hy + sy2 * S), (x0 + (sx + 34) * S, hy + sy2 * S),
-               (x0 + (sx + 28) * S, hy + (sy2 + 10) * S), (x0 + (sx + 6) * S, hy + (sy2 + 10) * S)],
-              fill=INK)
-    d.rectangle([x0 + (sx + 12) * S, hy + (sy2 - 8) * S, x0 + (sx + 20) * S, hy + sy2 * S], fill=RED)
-# naval drones
-d.ellipse([x0 + 60 * S, hy + 66 * S, x0 + 74 * S, hy + 74 * S], fill=(232, 140, 60))
-d.ellipse([x0 + 200 * S, hy + 60 * S, x0 + 214 * S, hy + 68 * S], fill=(232, 140, 60))
-d.text((x0 + cw - 108 * S, hy + 74 * S), "OFF LIBYA", font=serifb(10), fill=PAPER)
-y = tag(x0 + 8 * S, hy + 94 * S, 3, "LIBYAN COAST", "WAR")
-d.text((x0 + 8 * S, y), "Ukraine strikes two Russian ships", font=serifb(13.5), fill=INK)
-d.text((x0 + 8 * S, y + 17 * S), "off Libya with naval drones", font=serifb(13.5), fill=INK)
-para(x0 + 8 * S, y + 38 * S,
-     "Kyiv confirms naval-drone hits far from the Black Sea; the war spreads to the Libyan coast.",
-     serif(9.5), cw - 16 * S, MUTED)
-para(x0 + 8 * S, hy + hh - 26 * S, "(Guardian, BBC)", serifit(8.5), cw, MUTED)
-
-# ============================================================= cards r1 =====
-r1y = hy + hh + 10 * S
-r1h = 150 * S
-c5 = (PX - 2 * M - 4 * 8 * S) / 5
-
-
-def mini_chart(x, y, w, h, pts, col, wdt=2):
-    step = w / (len(pts) - 1)
-    for i in range(len(pts) - 1):
-        d.line([x + i * step, y + h * (1 - pts[i]), x + (i + 1) * step,
-                y + h * (1 - pts[i + 1])], fill=col, width=wdt * S)
-
-
-r1 = [
-    (4, "JAKARTA Â· ASIA", "24 killed in factory fire",
-     "Blaze tears through an Indonesian confectionery plant; dozens missing. (Guardian)", "fire"),
-    (5, "LONDON Â· EUROPE", "Met seizes 893 kg of cocaine",
-     "Hidden in boxes of oranges at the border; the haul is one of the year's largest. (Guardian)", "oranges"),
-    (6, "MOSCOW Â· WAR", "1,000+ Russian military suicides",
-     "Leaked data shows the toll of the Ukraine war on Moscow's own ranks. (Guardian)", "bars"),
-    (7, "GAZA Â· MIDEAST", "Gaza a 'toxic wasteland', Oxfam",
-     "Experts say Israeli attacks have left the strip environmentally devastated. (BBC, Guardian)", "rubble"),
-    (8, "WASHINGTON Â· US", "Huang back at Nvidia after scandal",
-     "Reinstated after an affair-with-spy scandal; Trump says 'I made the deal'. (BBC)", "chip"),
-]
-for i, (num, tg, head, body, art) in enumerate(r1):
-    x = M + i * (c5 + 8 * S)
-    card(x, r1y, c5, r1h)
-    ay = r1y + 8 * S
-    if art == "fire":
-        d.rectangle([x + 14 * S, ay + 14 * S, x + 72 * S, ay + 28 * S], fill=INK)
-        d.ellipse([x + 30 * S, ay + 2 * S, x + 46 * S, ay + 18 * S], fill=RED)
-        d.ellipse([x + 38 * S, ay + 6 * S, x + 48 * S, ay + 16 * S], fill=GOLD)
-    elif art == "oranges":
-        for k in range(3):
-            d.ellipse([x + (14 + k * 18) * S, ay + 8 * S, x + (30 + k * 18) * S,
-                       ay + 24 * S], fill=GOLD)
-        d.rectangle([x + 10 * S, ay + 24 * S, x + 78 * S, ay + 28 * S], fill=RULE)
-        d.text((x + 50 * S, ay), "893", font=serifb(12), fill=RED)
-    elif art == "bars":
-        for k, bh in enumerate([10, 16, 24]):
-            d.rectangle([x + (16 + k * 20) * S, ay + 28 * S - bh * S,
-                         x + (30 + k * 20) * S, ay + 28 * S], fill=TEAL)
-        d.text((x + 72 * S, ay + 2 * S), "1K+", font=serifb(14), fill=RED)
-    elif art == "rubble":
-        d.polygon([(x + 14 * S, ay + 28 * S), (x + 40 * S, ay + 10 * S),
-                   (x + 66 * S, ay + 28 * S)], fill=(120, 110, 90))
-        d.line([x + 26 * S, ay + 16 * S, x + 52 * S, ay + 26 * S], fill=RED, width=2 * S)
-    else:
-        d.rectangle([x + 24 * S, ay + 2 * S, x + 54 * S, ay + 26 * S], fill=TEAL)
-        d.rectangle([x + 30 * S, ay + 8 * S, x + 48 * S, ay + 20 * S], fill=(232, 168, 74))
-        d.line([x + 54 * S, ay + 6 * S, x + 66 * S, ay + 6 * S], fill=INK, width=S)
-        d.line([x + 54 * S, ay + 22 * S, x + 66 * S, ay + 22 * S], fill=INK, width=S)
-    y = tag(x + 8 * S, ay + 34 * S, num, *tg.split(" Â· "))
-    head_lines = wrap(head, serifb(11.5), c5 - 16 * S)[:2]
-    for hl in head_lines:
-        d.text((x + 8 * S, y), hl, font=serifb(11.5), fill=INK)
-        y += 14 * S
-    y += 2 * S
-    para(x + 8 * S, y, body, serif(8.5), c5 - 16 * S, MUTED)
-
-# ======================================================== also-today list ===
-aly = r1y + r1h + 12 * S
-d.text((M, aly), "ALSO ON MONDAY 23 NOVEMBER â€” 10 MORE STORIES", font=serifb(12), fill=RED)
-d.line([M, aly + 17 * S, PX - M, aly + 17 * S], fill=RULE, width=S)
-items = [
-    ("BRUSSELS", "EU proposes sweeping new Russia sanctions including a sports ban.", "Al Jazeera"),
-    ("LONDON", "UK sanctions top Myanmar military leaders after Rohingya genocide ruling.", "BBC"),
-    ("DAMASCUS", "Israel's southern Syria incursion triggers fear and destruction.", "Al Jazeera"),
-    ("WASHINGTON", "US escalates Iran sanctions, targets 'shadow banking' networks.", "Al Jazeera"),
-    ("TEHRAN", "Singer Parastoo Ahmadi flogged for performing without hijab.", "BBC, Al Jazeera"),
-    ("PARIS", "GisÃ¨le Pelicot 'deeply shocked' as nude photos sent to media to promote a book.", "BBC, Guardian"),
-    ("SEATTLE", "Outrage after ICE arrests father and daughter at the airport; DoJ admits it deported a US citizen.", "BBC, Guardian"),
-    ("BOGOTÃ", "Drone attack on a police base in Colombia injures three, including an infant.", "Al Jazeera"),
-    ("ISTANBUL", "Turkish police hunt a lioness stalking the city's outskirts.", "Al Jazeera"),
-    ("LONDON", "Former prince Andrew paid Â£750,000 to help a Turkish woman with a passport, High Court hears.", "Guardian"),
-]
-colw = (PX - 2 * M - 20 * S) / 2
-item_f = serif(8.3)
-lead_f = serifb(8.8)
-half = 5
-for ci, chunk in enumerate((items[:half], items[half:])):
-    x = M + ci * (colw + 20 * S)
-    y = aly + 22 * S
-    for city, txt, src in chunk:
-        full = "%s (%s)" % (txt, src)
-        lw = d.textlength(city + "  ", font=lead_f)
-        d.text((x, y), city, font=lead_f, fill=INK)
-        y = para(x + lw, y, full, item_f, colw - lw, MUTED)
-        y += 6 * S
-
-# ==================================================== story index panel =====
-by = aly + 118 * S
-bw = 300 * S
-card(M, by, bw, PX - M - by)
-d.text((M + 8 * S, by + 6 * S), "THE DAY AT A GLANCE", font=serifb(11), fill=INK)
-regions = [
-    ("MIDEAST", ["1 Â· 4g Â· 7"]),
-    ("EUROPE", ["2 Â· 5 Â· 8a Â· 8b"]),
-    ("ASIA", ["4a Â· 6"]),
-    ("AMERICAS", ["7a Â· 7b Â· 8c"]),
-    ("WAR FRONTS", ["1 Â· 3 Â· 6"]),
-]
-yy = by + 24 * S
-for rname, its in regions:
-    d.text((M + 10 * S, yy), rname, font=serifb(9.5), fill=TEAL)
-    d.text((M + 128 * S, yy), " Â· ".join(its), font=serif(9), fill=MUTED)
-    yy += 14 * S
-d.line([M + 10 * S, yy + 2 * S, M + bw - 10 * S, yy + 2 * S], fill=RULE, width=S)
-d.text((M + 10 * S, yy + 6 * S), "17 stories Â· 7 regions Â· 6 fields",
-       font=serifit(9), fill=RED)
-
-dx0 = M + bw + 10 * S
-d.rectangle([dx0, by, PX - M, PX - M], outline=RED, width=2 * S)
-d.text((dx0 + 10 * S, by + 6 * S), "DATE CHECK", font=serifb(12), fill=RED)
-para(dx0 + 10 * S, by + 24 * S,
-     "The Nvidia scandal spans several days; Huang's reinstatement was reported into 24 November. "
-     "COP31's collapse and the leaked Russian suicide data were both published on 23 November.",
-     serif(8.8), PX - M - dx0 - 20 * S, MUTED)
-para(dx0 + 10 * S, by + 64 * S,
-     "Every story happened, or was first reported, on 23 November 2026 in at least one time zone; "
-     "figures and claims are as reported and attributed, not stated as fact.",
-     serif(8.8), PX - M - dx0 - 20 * S, MUTED)
-d.text((dx0 + 10 * S, PX - M - 14 * S), "Sources: BBC World, Al Jazeera, Guardian â€” original drawing, made in code.",
-       font=serifit(7.6), fill=MUTED)
-
-# footer
-d.line([M, PX - M + 2 * S, PX - M, PX - M + 2 * S], fill=INK, width=S)
-
-# ------------------------------------------------------------ downscale ----
-final = img.resize((W, H), Image.Resampling.LANCZOS)
-out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "entry.png")
-final.save(out, "PNG", optimize=True)
-print("wrote", out, os.path.getsize(out), "bytes")
+#coding:l1
+import lzma;exec(lzma.decompress('\x000\0\0Á%\0\0\0\0\0\0\0ˆ„àšB¾Šw`ŠÓÕ	ñ |qè\r³êÚÅxğQù\nİ±åı\'ì	\'7=œQüÆæ~#©ülˆ`ÍS—$èè¤iİÄ|¶\n/®xÈÓ“İccÅEB3$¨ğ‘@yS"vyŒÖ¦ú5ƒYÙÃ«Šû‘ªØ‘"ü6¯w;vÛ’²\0^\rÊ:Õ(K ÂŞrx:­Š&äKZ)m\0~åNŞÚ†­öÖí… }7§æ_ñéÇ¶åN:ø1,ùÌº•»}ğõêíÉƒ=±j›ò{FbøMàwõÎğ¹/ÌÇ-Ô&Ú_t¡¥>³"òç*|\rÿ¥|H•=hÓjğ7ú¦lk÷ï:áj+øg}œsò\'Åİ+ãÕáh_ÿÇE_Ö,œ\\ÇÜŸµs\0É÷J„A‚«M¥QÏYæTŸ?wşHwš±,Ñü1Và5€‰Ğ¯Í7µùv’é„ßŸê¨,ëˆOæş£	~pá^@%d‚Éòn›ÿã7ûˆsšã¢t’½D)yƒ„£–yhÏ”©?âB`ÕZøÅ%™¦²ù%QEJ^·àïgáCØÕ2*è5AÙìkšjİé¬9²ÂŸÅ±pRX3F+6B §ŒÛ c‡Èö}ÿ’Õç^¹Šd²¾7„¨»Õf±‹;¹^ˆ@!ânç‰ÉÒÂí€ÿOJ.Kè AÆ©|†§çuMË½Á`.éu‡[c²4rZ{?]u‘ó»¦Koq3ÁïÓâ)<Å4l¥ R­°¿fÆUg)²ç¼5Â¸=ÉRò} lo!´/qXÓ\nAÌéÒpà>ø©G9&ÿ{PŞÙÒçït$ÜEı"o#;™¬:lgêú¼l/¤£J(ÒÃ«­L=Êüşüó6W¾UL õ×¸\0pqÒéÓ–›õ\n§²G9dÇ	·¤èN°.úœÉÖœáP]#›—„Â°Ö‰ÕÊ„\\¿ÊeL\0ˆia¹‚_\r¬që¥Æ†EVŞÜˆhšÌÔI„¶:şl	6®ÒY‘Å~>\nj@y‹éÑ²İ—@ü˜¼Y†Â4ğ(¾À9Ÿ,h*9eÑÊaÇM¯‡½¯/u™¼\0’é¦*+•“ãj!=!FRÈMÏ/åçí2´-˜úíêÊ²Ã-vYÁ*@|}¬mšQ^ˆÍmÿì„Jù"^ĞÔ"#ï1cÌ%¬íu•9Ñ\0Ğ2ü¡ÀO`å‰0JNí6\\Ù9ù\nZ´OD¤lFœcâM\'z.Âs•‰àô¥›4ÇL³8_2ï”yÿ&Êë¦™•Ñ#D‡ÆRt¾EÙ6ÑcÙDQxÃR\n,iÔ”Ÿµwb|¤,d“\0AmÃô]»sTuów$ÿTü‚d‰º’é¬YZokâ&òÜ ß\\íeÕP˜ÄU­U?=3d«ëß†öƒØ­;\rğŞ±ù8³z½>?÷Ö‰<D­/a2äÛkš6-øxji*Ë‰9Ì>¯ğ}òé\0®Õ+òï1•EÖÓJŒ€V\\Ç¯:´¶~!Ì z&èí‘)Ï”8Ç	>1¸>`í=Ú&±Œ.K²)bØé¡«c›ÓiÙduc„P¢Àœ"Aª¦±²DòEWÍgr}d•i%*v&FHjCC‘<v6gS~œ–QŒF´iO(š\'™Ø\nô$‘\\™FBÅòQ±úIãîK•ªtu#ÒÍ×›o§{áo‡èœzpUPf+$ÍeGäòêW^|ı®´\0wT•L@O”0ûTÅNØiÖÂ¦R\'‰*À\'”&æ»Ñw¨íUå³b¸ÔÚŠ‚L>Šı¢Æ-£° hºşLwRpxN·Ê‘@f÷r6Íİv?AÍô H%”_¿ÅwNØ÷JÉKÇhêÀ:	SßW6Í¸K¨UM]à\râ®ò:ÍİuòæÕ#²½2Ê&áÂø¥ş	‰Òà!&ÍğíÛÔ{±‹‘›5j¯>!ùà­iô?‡!"1Rñ×¡ƒi7/§…¿çTFå¹l§Œú«9¹6Ä[9³„…-İwÖP+úÿşšuøà/êhµî~\0ô>€ŸşËÊ€¼lœ!Œ´èwMX,ç$u3+p©ÁÇ¨êÜô2ÄÀZhö¹pµ•Sp µ/~‚F!]Âm¢Š_ØñşKlÃİÔ–ïó…±Q^.} r³úŞ5­u\n`?^Ü\n¢É\rNŞÌ´\r;X)¥X´„ˆ¥ji¬ÖÄ×Ùµ‰’¿2ºôQdbï`­IA€úéå÷®±œ"Ëò6ÉÜ%Æ±µÙ™ùÿ½{nÙ…‰ö­DXç)Oï“V£’%·*>æ;>ÁX;»}ÀWÎë!t=ÜÑî€ª¿¡[85Òã÷‰B\'±®2¨xŸïbzd„¼S2=eĞ:ğ*9ÒÉ™fŞ	©4q@:%±ãœòŠY*¯{@.óM~j˜şmMáï\rsãš¿8„%wï|Ä\rê¿Ã³÷kĞx;~w\\5„Wá6OÈ¾™ßRØ,l4œ‚ô3Ùƒ‹X¸¸¥š\nLß™c<!<¿Ä÷µ4Úyß‡<ÇpÂn_7¿vÌ`<úáNŠäÑÛ#mÔ’«•ºÃ5ür$8ççÔ¸§ƒ²ğƒ`5wêEÌ“ëŞFU­Ã@Ì»¨ut2«Åƒ³6²gÔ8Ä-#<¢\n¯•¢=APK-´»*Å_ÏÖ ½íbPUÅÌ»İÈI±rRào"Ğ6!]±¯V›ØË;,‰pHà”Xóïº>ûš4a¦¢!D\'¦Ø°9Æ‹ùÿ¹{»×	†\nã´‚oÁ§±»}¬Il¸*[ää\0ÎCI¦‘†ŠÅÒ“Ú{5v”}Cö\níÊï&ä\r¨qÈ]]½ìÑ¬§‹Ã¸iÄŒ¡üÓw½Iß3ÛmÜB29BLLµ’á;cwøF•*-ï(uSÓ2¤§÷	¬i^œXd&‹Ü¥>Ò‹åF ¬÷šØ•*¾ü‡]ç±-èõıéè=8Ú¤X‡=_İĞ”ãs|@ÖÉ‹‘©İÌıBÄô/@ûD«îFˆÕ`´gÅóÃÖÁNÀ`Â\nD~[<Ñ¤å%à7“z(«eK$9ÚÚßãMåoß®IY,šş´:„^p»5àdy\\µş\\8Kx§„Ñ#\0oÃèÔÛÚJè uw@íê§ÉŠ,UÙî¤Î-jÆÕhÈ¤\r%œŠgİö5·µ{ÎWÊØ–ÉU—µwFjÕĞ–ëÂ‘3ë(¤Äİª	Î<¼U8ú£«4x¢p™Eà;ˆÚg»ûUÛgãÚˆ\'|ÊŠyœéÍûµ1YaéQRîµ‚ìnØJ÷¬»ZËãÿí¡x&Ô6š¤˜‡ÄU«{£C¤ò™JåÁÃ;„¹ñâ½d£÷4‚+¤UÁòÈa3•Ù½³ÈB¦â¥L;Òb.ºşIO¶ößsÉßÑİGó]„¤æ¼Ï\ry½‰`Á£<™Ã\0{U8SÆ¬Ä¨ã4½¡³˜#ìÉùÖnzÚo÷Ì©ñÎy%Ûäz=–õ!¼uŸ\nT=š]ÈZú#èxFÍ›g›Òƒ\r\rËúo³=ø@oãSd€-®P¥-$:Ï™¶›´ç&·îG\0ì?ñúO&z8ÿYšT·™m‚‡ó•º¶¤  Ä£Ë’Šèîmêïë„“ü_¬\r“²g<aOé¬ötª	¬à¬‹Ÿ&gÁÈSûN;ÑÜTÀİMnÊS1tş·ãí¬×#–ß“l0àva‹ê‹!R54’Ğû¾Q2ã½tBèSS³³-ïR÷ºÓ¯¯Ç!íë§kt5ç-ãî€%Ao.©FÑdGª?uş"şwôØwúHŸª2~v\\Í=Õ@hQĞı‘§‡ä³Æ©}ñM*!”2ÑÛ«+¥`v#Ä›a™ôƒiá1¹rŸÚ"j~pêü„µ*t0ı\0«Q"üÚZíêâß÷/¿ßhœ €®şù‘Ú¥nã;ñá(¢R§.Æ†6¿oD¢ûœf®v¸ûºõÿT¤µã§E»UhX•Î¹+Â«)ÕšÖ·ÒO»‹²ò÷:á¬vNğM.ää¦pÕ’|µWå	æqñrÚåÛ‚£Y\rs\n\\´ôğre”øè.’¥óËILœºBü–>L8„BÕK21S¾€Ô÷‹â[Á-ş²¬iéò˜Pg8\n©£õM£¡HÅf®©%çvÆM‰“¬^?R–Ê}v>­i_«Úy¢kİzĞÍÊ¥t…«Í™@ŸËFÒÕÜ4û"<Opòx¿~›÷a‘¿ÄMÁ2r Z½8sĞ{¨Sö%G¿XàÌÍ\'Uªd²ã°«ô‘E?±P÷ğ\'ªÇb#Âİõ)aë›È¨ÍÜÁØğ\'P\'¿4k\r”(±"ÉÈ¢¾»_XÖ$Ë!²Şkµ&Ãâçl™¦\nÿÆb}‰Èùµ&ær¹ôëVBÄH7î_i¹…íŠ8LdsPAth¾Š.üú°Ø¸ŠJ*×iŞÕjbŸ„ŠË!{\\r‡´S š“G<˜ÒuùM¬#\'æ!jnüjà++MpÛ6m¹rtxÔÏìz\'Õ=©‚gê/¥œ4L"uêğC¨Ö«·½œ‹Å `‡¥ñ†ú¡3­5>ç‰ÒTÏ)°ç5daÍ6˜\n\'¦ëS²‰D,WíÛÑç¥3Im¿bmµñe],-”ÑMZİ©oGÕs&.áŠ“ZeÛìåÖ'.encode('l1')))
