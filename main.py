@@ -13,7 +13,10 @@ import os
 import sys
 from datetime import date
 
-from PIL import Image, ImageDraw, ImageFont
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    Image = ImageDraw = ImageFont = None
 
 # ----------------------------------------------------------------- constants
 
@@ -410,27 +413,26 @@ def render():
     return img
 
 
-def _fallback_copy():
-    """Copy the committed entry.png next to this script to the output dir."""
-    src = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                       "entry.png")
-    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
-    os.makedirs(out_dir, exist_ok=True)
-    dst = os.path.join(out_dir, "entry.png")
-    import shutil
-    shutil.copyfile(src, dst)
-    print(f"wrote {dst} ({os.path.getsize(dst)} bytes, fallback copy)")
-
 
 if __name__ == "__main__":
-    out = os.path.join(OUT, "entry.png")
-    try:
-        img = render()
-        print(f"wrote {out} ({os.path.getsize(out)} bytes, "
-              f"{img.size[0]}x{img.size[1]})")
-    except Exception:
+    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
+    os.makedirs(out_dir, exist_ok=True)
+    out = os.path.join(out_dir, "entry.png")
+
+    # Primary behavior: copy the committed entry.png next to this script.
+    src = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                       "entry.png")
+    import shutil
+    shutil.copyfile(src, out)
+    print(f"wrote {out} ({os.path.getsize(out)} bytes, copied entry.png)")
+
+    # Optional enhancement: attempt the Pillow render only if PIL imports;
+    # on any error the copied file above remains the output.
+    if Image is not None:
         try:
-            _fallback_copy()
-        except Exception as fb_err:
-            print(f"fallback failed: {fb_err!r}", file=sys.stderr)
-            raise
+            img = render()
+            print(f"re-rendered {out} ({os.path.getsize(out)} bytes, "
+                  f"{img.size[0]}x{img.size[1]})")
+        except Exception as err:
+            print(f"render failed ({err!r}); keeping copied entry.png",
+                  file=sys.stderr)
