@@ -1,11 +1,383 @@
 #!/usr/bin/env python3
-"""make.fun program/v1 entrypoint: copy the committed entry.png to the output dir."""
+"""newsimg-20261123 — newspaper front page renderer (Pillow, offline).
+
+Renders the Monday 23 November 2026 front page at 1024x1024:
+ivory paper, masthead, stat band, three hero cards, a five-card brief row,
+an "also today" list and a date check line. No network, no external assets.
+"""
 
 import os
-import shutil
+from datetime import date
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+from PIL import Image, ImageDraw, ImageFont
+
+# ---------------------------------------------------------------- constants
+
+W = H = 1024
 OUT = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
 
-os.makedirs(OUT, exist_ok=True)
-shutil.copyfile(os.path.join(HERE, "entry.png"), os.path.join(OUT, "entry.png"))
+PAPER = (244, 239, 226)        # ivory
+INK = (28, 26, 24)             # near-black body ink
+RULE = (28, 26, 24)
+FAINT = (120, 112, 100)        # captions, kickers
+ACCENT = (156, 44, 38)         # editorial red
+CARD = (236, 229, 211)         # slightly darker card face
+CARD_EDGE = (200, 191, 170)
+SKY = (198, 214, 222)
+SEA = (60, 90, 108)
+SAND = (222, 205, 168)
+GREY = (108, 106, 100)
+
+F = "/usr/share/fonts/truetype"
+
+
+def font(name, size):
+    path = {
+        "serif": f"{F}/liberation/LiberationSerif-Regular.ttf",
+        "serif-b": f"{F}/liberation/LiberationSerif-Bold.ttf",
+        "serif-i": f"{F}/liberation/LiberationSerif-Italic.ttf",
+        "sans": f"{F}/liberation/LiberationSans-Regular.ttf",
+        "sans-b": f"{F}/liberation/LiberationSans-Bold.ttf",
+        "mono": f"{F}/liberation/LiberationMono-Regular.ttf",
+        "mono-b": f"{F}/liberation/LiberationMono-Bold.ttf",
+    }[name]
+    return ImageFont.truetype(path, size)
+
+
+# ---------------------------------------------------------------- helpers
+
+def wrap(draw, text, fnt, width):
+    """Greedy word wrap; returns list of lines."""
+    words, lines, cur = text.split(), [], ""
+    for w_ in words:
+        trial = (cur + " " + w_).strip()
+        if draw.textlength(trial, font=fnt) <= width:
+            cur = trial
+        else:
+            if cur:
+                lines.append(cur)
+            cur = w_
+    if cur:
+        lines.append(cur)
+    return lines
+
+
+def draw_wrapped(draw, xy, text, fnt, width, fill, leading=1.22, max_lines=None):
+    x, y = xy
+    lines = wrap(draw, text, fnt, width)
+    if max_lines:
+        lines = lines[:max_lines]
+    step = int(fnt.size * leading)
+    for line in lines:
+        draw.text((x, y), line, font=fnt, fill=fill)
+        y += step
+    return y
+
+
+def hrule(draw, y, x0, x1, weight=1, fill=RULE):
+    draw.rectangle([x0, y, x1, y + weight - 1], fill=fill)
+
+
+def vrule(draw, x, y0, y1, weight=1, fill=RULE):
+    draw.rectangle([x, y0, x + weight - 1, y1], fill=fill)
+
+
+def kicker_tag(draw, x, y, text, fill=ACCENT):
+    fnt = font("sans-b", 11)
+    draw.text((x, y), text.upper(), font=fnt, fill=fill)
+
+
+def headline(draw, x, y, text, size, width, fill=INK, leading=1.08):
+    fnt = font("serif-b", size)
+    return draw_wrapped(draw, (x, y), text, fnt, width, fill, leading=leading)
+
+
+# ---------------------------------------------------------------- masthead
+
+def masthead(draw, top_date):
+    # Top hairline and ear notes
+    hrule(draw, 26, 24, W - 24, 2)
+    ear = font("serif-i", 13)
+    draw.text((24, 34), "Vol. CXXVII, No. 214", font=ear, fill=FAINT)
+    draw.text((W - 24 - draw.textlength("Late Final Edition", font=ear),
+               34), "Late Final Edition", font=ear, fill=FAINT)
+
+    # Masthead title
+    f = font("serif-b", 64)
+    title = "THE DAILY LEDGER"
+    tw = draw.textlength(title, font=f)
+    draw.text(((W - tw) / 2, 54), title, font=f, fill=INK)
+
+    sub = font("sans", 12)
+    tag = "INDEPENDENT SINCE 1899  ·  WORLD, POLITICS, SCIENCE, MARKETS"
+    draw.text(((W - draw.textlength(tag, font=sub)) / 2, 128), tag,
+              font=sub, fill=FAINT)
+
+    # Dateline rule band
+    hrule(draw, 152, 24, W - 24, 2)
+    df = font("sans-b", 14)
+    left = top_date.strftime("Monday, %d %B %Y").replace(" 0", " ", 1)
+    draw.text((24, 160), left.upper(), font=df, fill=INK)
+    price = "£2.40  ·  €2.80  ·  $3.50"
+    draw.text((W - 24 - draw.textlength(price, font=df), 160), price,
+              font=df, fill=INK)
+    hrule(draw, 184, 24, W - 24, 1)
+
+
+# ---------------------------------------------------------------- stat band
+
+def stat_band(draw, y):
+    """A thin numbered band of headline statistics under the masthead."""
+    stats = [
+        ("GULF", "412", "strikes logged overnight"),
+        ("BLACK SEA", "37", "naval drones interdicted"),
+        ("COP31", "0", "agreement after 11 days"),
+        ("BRENT", "$71.14", "+2.3% on supply risk"),
+        ("FTSE 100", "8,412", "-0.6% at Friday close"),
+        ("YEN", "154.8", "per dollar, 8-week low"),
+    ]
+    f_num = font("mono-b", 17)
+    f_lab = font("sans-b", 10)
+    f_sub = font("sans", 9)
+    x0, x1 = 24, W - 24
+    n = len(stats)
+    colw = (x1 - x0) / n
+    draw.rectangle([x0, y, x1, y + 58], outline=RULE, width=1)
+    for i, (lab, num, sub) in enumerate(stats):
+        cx = x0 + colw * i + 12
+        draw.text((cx, y + 8), lab, font=f_lab, fill=ACCENT)
+        draw.text((cx, y + 22), num, font=f_num, fill=INK)
+        draw.text((cx, y + 43), sub, font=f_sub, fill=FAINT)
+        if i:
+            vrule(draw, int(x0 + colw * i), y + 6, y + 52)
+    return y + 58
+
+
+# ---------------------------------------------------------------- hero cards
+
+def hero_gulf(draw, x, y, w, h):
+    """Card 1 — Gulf strikes: flat map horizon with strike bursts."""
+    d = draw
+    d.rectangle([x, y, x + w, y + h], fill=CARD, outline=CARD_EDGE)
+    # illustration band
+    iy, ih = y + 12, 96
+    d.rectangle([x + 12, iy, x + w - 12, iy + ih], fill=SAND, outline=INK)
+    horizon = iy + int(ih * 0.55)
+    d.rectangle([x + 12, horizon, x + w - 12, iy + ih], fill=SEA, outline=INK)
+    for bx, by, r in ((0.22, 0.30, 9), (0.48, 0.22, 12), (0.72, 0.36, 8)):
+        cx, cy = x + 12 + int((w - 24) * bx), iy + int(ih * by)
+        d.polygon([(cx, cy - r), (cx + r * 0.8, cy + r * 0.6),
+                   (cx - r * 0.8, cy + r * 0.6)], fill=ACCENT, outline=INK)
+    kicker_tag(d, x + 14, iy + ih + 20, "Middle East")
+    hl_y = headline(d, x + 14, iy + ih + 38,
+                    "Overnight barrages pound Gulf ports; tanker traffic halts",
+                    20, w - 28)
+    draw_wrapped(d, (x + 14, hl_y + 6),
+                 "Three hours of sustained strikes shuttered two major "
+                 "harbours and pushed insurers to suspend cover for the "
+                 "strait.", font("serif", 13), w - 28, INK,
+                 leading=1.28, max_lines=4)
+    d.text((x + 14, h + y - 22), "Analysis, p. 4", font=font("serif-i", 11),
+           fill=FAINT)
+
+
+def hero_blacksea(draw, x, y, w, h):
+    """Card 2 — Black Sea naval drones: sea with wake tracks."""
+    d = draw
+    d.rectangle([x, y, x + w, y + h], fill=CARD, outline=CARD_EDGE)
+    iy, ih = y + 12, 96
+    d.rectangle([x + 12, iy, x + w - 12, iy + ih], fill=SKY, outline=INK)
+    surf = iy + int(ih * 0.42)
+    d.rectangle([x + 12, surf, x + w - 12, iy + ih], fill=SEA, outline=INK)
+    # three drone wakes cutting toward a hull
+    hx = x + int((w - 24) * 0.78)
+    for off, lag in ((0.30, 0), (0.42, 8), (0.18, 16)):
+        sx = x + 16 + int((w - 32) * off)
+        sy = surf + 14 + lag
+        d.line([(sx, sy), (hx, iy + ih - 12)], fill=PAPER, width=2)
+        d.ellipse([sx - 5, sy - 3, sx + 5, sy + 3], fill=INK)
+    d.rectangle([hx - 26, iy + ih - 30, hx + 18, iy + ih - 10],
+                fill=GREY, outline=INK)
+    kicker_tag(d, x + 14, iy + ih + 20, "Black Sea")
+    hl_y = headline(d, x + 14, iy + ih + 38,
+                    "Drone swarm turned back at harbour mouth after 6-hour duel",
+                    20, w - 28)
+    draw_wrapped(d, (x + 14, hl_y + 6),
+                 "Defences claimed 37 intercepts; one grain corridor convoy "
+                 "waited out the attack at anchorage.", font("serif", 13),
+                 w - 28, INK, leading=1.28, max_lines=4)
+    d.text((x + 14, h + y - 22), "Report, p. 6", font=font("serif-i", 11),
+           fill=FAINT)
+
+
+def hero_cop31(draw, x, y, w, h):
+    """Card 3 — COP31 breakdown: gavel over a cracked table."""
+    d = draw
+    d.rectangle([x, y, x + w, y + h], fill=CARD, outline=CARD_EDGE)
+    iy, ih = y + 12, 96
+    d.rectangle([x + 12, iy, x + w - 12, iy + ih], fill=(214, 208, 190),
+                outline=INK)
+    # podium table with a jagged crack
+    table_y = iy + int(ih * 0.62)
+    d.rectangle([x + 30, table_y, x + w - 30, iy + ih - 8], fill=(150, 96, 66),
+                outline=INK)
+    cx = x + int(w / 2)
+    d.line([(cx - 12, table_y + 4), (cx - 2, table_y + 18),
+            (cx - 14, table_y + 30)], fill=INK, width=2)
+    # gavel head
+    gx, gy = cx + 26, iy + int(ih * 0.30)
+    d.rectangle([gx - 18, gy - 9, gx + 18, gy + 9], fill=(90, 62, 40),
+                outline=INK)
+    d.line([(gx - 26, gy), (gx - 14, gy)], fill=INK, width=4)
+    kicker_tag(d, x + 14, iy + ih + 20, "Climate")
+    hl_y = headline(d, x + 14, iy + ih + 38,
+                    "COP31 ends with no deal as blocs walk out of final session",
+                    20, w - 28)
+    draw_wrapped(d, (x + 14, hl_y + 6),
+                 "Delegates left at 03:10 with only a procedural note; "
+                 "host declared the process \u201cpaused, not dead\u201d.",
+                 font("serif", 13), w - 28, INK, leading=1.28, max_lines=4)
+    d.text((x + 14, h + y - 22), "Inside, p. 8", font=font("serif-i", 11),
+           fill=FAINT)
+
+
+# ---------------------------------------------------------------- brief row
+
+def brief_cards(draw, y, briefs):
+    """Five equal brief cards in a row."""
+    x0, x1 = 24, W - 24
+    n = len(briefs)
+    gap = 8
+    cw = (x1 - x0 - gap * (n - 1)) / n
+    ch = 118
+    for i, (tag, text) in enumerate(briefs):
+        cx = int(x0 + i * (cw + gap))
+        draw.rectangle([cx, y, int(cx + cw), y + ch], fill=CARD,
+                       outline=CARD_EDGE)
+        kicker_tag(draw, cx + 10, y + 10, tag)
+        draw_wrapped(draw, (cx + 10, y + 32), text, font("serif", 12),
+                     cw - 20, INK, leading=1.3, max_lines=5)
+        draw.line([(cx + 10, y + ch - 12), (cx + 22, y + ch - 12)],
+                  fill=ACCENT, width=2)
+    return y + ch
+
+
+# ---------------------------------------------------------------- also today
+
+def also_today(draw, x, y, w, items):
+    f_num = font("mono-b", 13)
+    f_txt = font("serif", 13)
+    hrule(draw, y, x, x + w, 2)
+    draw.text((x, y + 8), "ALSO TODAY", font=font("sans-b", 14), fill=ACCENT)
+    hrule(draw, y + 30, x, x + w, 1)
+    yy = y + 42
+    for i, text in enumerate(items, 1):
+        draw.text((x, yy + 2), f"{i:02d}", font=f_num, fill=ACCENT)
+        lines = wrap(draw, text, f_txt, w - 36)
+        for line in lines[:2]:
+            draw.text((x + 36, yy), line, font=f_txt, fill=INK)
+            yy += int(13 * 1.3)
+        yy += 8
+    return yy
+
+
+# ---------------------------------------------------------------- footer
+
+def date_check(draw, y):
+    """Footer verifying the dateline against the calendar."""
+    d = date(2026, 11, 23)
+    weekday = d.strftime("%A")
+    ok = weekday == "Monday" and d == date(2026, 11, 23)
+    stamp = (f"DATE CHECK: {d.isoformat()} · {weekday} · "
+             f"day 327 of 2026 · {'OK' if ok else 'MISMATCH'}")
+    f = font("mono", 12)
+    hrule(draw, y, 24, W - 24, 1)
+    draw.text((24, y + 8), stamp, font=f, fill=(ACCENT if ok else GREY))
+    draw.text((W - 24 - draw.textlength("Rendered with Pillow · no network",
+              font=f), y + 8), "Rendered with Pillow · no network",
+              font=f, fill=FAINT)
+
+
+# ---------------------------------------------------------------- layout
+
+def render():
+    top_date = date(2026, 11, 23)
+    img = Image.new("RGB", (W, H), PAPER)
+    draw = ImageDraw.Draw(img)
+
+    masthead(draw, top_date)
+    y = stat_band(draw, 196)
+
+    # --- hero row: 3 cards
+    hy = y + 14
+    hw = (W - 48 - 2 * 12) / 3
+    hh = 292
+    cards = [hero_gulf, hero_blacksea, hero_cop31]
+    for i, fn in enumerate(cards):
+        fn(draw, int(24 + i * (hw + 12)), hy, int(hw), hh)
+    y = hy + hh
+
+    # --- brief row: 5 cards
+    briefs = [
+        ("MARKETS", "Brent jumps on supply risk; airlines re-route around "
+                    "the gulf corridor."),
+        ("CITY", "Merger talks collapse at the eleventh hour; shares of "
+                 "both houses slide."),
+        ("SCIENCE", "Fusion pilot posts its fourth consecutive net-positive "
+                    "burst."),
+        ("SPORT", "Late penalty sends the underdogs to the cup quarter-"
+                  "finals."),
+        ("CULTURE", "Restored 1931 reel opens the winter season to full "
+                    "houses."),
+    ]
+    y = brief_cards(draw, y + 14, briefs) + 16
+
+    # --- also-today list (left column) and digest (right)
+    items = [
+        "Border talks resume Thursday; both delegations signal flexibility.",
+        "Rail strike enters third week as mediators float a wage floor.",
+        "Astronomers log the third interstellar object of the decade.",
+        "City approves the flood-barrel pilot for the north embankment.",
+        "Obituary: the cartographer who redrew four national atlases.",
+        "Weather: grey, 9°C, easing wind; frost expected inland by dusk.",
+    ]
+    left_w = int((W - 72) * 0.62)
+    right_x = 24 + left_w + 24
+    right_w = W - 24 - right_x
+    also_today(draw, 24, y, left_w, items)
+
+    # right column digest
+    rx = right_x
+    hrule(draw, y, rx, rx + right_w, 2)
+    draw.text((rx, y + 8), "DAY AT A GLANCE", font=font("sans-b", 14),
+              fill=ACCENT)
+    hrule(draw, y + 30, rx, rx + right_w, 1)
+    digest = [
+        ("06:40", "First strikes reported near the strait's eastern approach."),
+        ("09:15", "Grain corridor convoy holds at anchorage B."),
+        ("13:00", "COP31 plenary suspends without a closing gavel."),
+        ("17:45", "Market close: defensives up, carriers and insurers down."),
+        ("22:00", "Harbour authority confirms reopening is 'days, not weeks'."),
+    ]
+    yy = y + 42
+    f_t = font("mono-b", 12)
+    f_d = font("serif", 12)
+    for t, txt in digest:
+        draw.text((rx, yy + 1), t, font=f_t, fill=ACCENT)
+        yy = draw_wrapped(draw, (rx + 44, yy), txt, f_d, right_w - 44, INK,
+                          leading=1.25)
+        yy += 7
+
+    # --- footer
+    date_check(draw, H - 40)
+
+    img.save(os.path.join(OUT, "entry.png"))
+    return img
+
+
+if __name__ == "__main__":
+    out = os.path.join(OUT, "entry.png")
+    os.makedirs(OUT, exist_ok=True)
+    img = render()
+    print(f"wrote {out} ({os.path.getsize(out)} bytes, "
+          f"{img.size[0]}x{img.size[1]})")
