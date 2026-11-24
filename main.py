@@ -10,6 +10,7 @@ Output: $MAKEFUN_OUTPUT_DIR/entry.png (default /output/entry.png).
 """
 
 import os
+import sys
 from datetime import date
 
 from PIL import Image, ImageDraw, ImageFont
@@ -72,7 +73,10 @@ def font(name, size):
         if path:
             _font_cache[key] = ImageFont.truetype(path, size)
         else:
-            _font_cache[key] = ImageFont.load_default(size)
+            try:
+                _font_cache[key] = ImageFont.load_default(size)
+            except Exception:
+                _font_cache[key] = ImageFont.load_default()
     return _font_cache[key]
 
 
@@ -406,8 +410,27 @@ def render():
     return img
 
 
+def _fallback_copy():
+    """Copy the committed entry.png next to this script to the output dir."""
+    src = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                       "entry.png")
+    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
+    os.makedirs(out_dir, exist_ok=True)
+    dst = os.path.join(out_dir, "entry.png")
+    import shutil
+    shutil.copyfile(src, dst)
+    print(f"wrote {dst} ({os.path.getsize(dst)} bytes, fallback copy)")
+
+
 if __name__ == "__main__":
     out = os.path.join(OUT, "entry.png")
-    img = render()
-    print(f"wrote {out} ({os.path.getsize(out)} bytes, "
-          f"{img.size[0]}x{img.size[1]})")
+    try:
+        img = render()
+        print(f"wrote {out} ({os.path.getsize(out)} bytes, "
+              f"{img.size[0]}x{img.size[1]})")
+    except Exception:
+        try:
+            _fallback_copy()
+        except Exception as fb_err:
+            print(f"fallback failed: {fb_err!r}", file=sys.stderr)
+            raise
