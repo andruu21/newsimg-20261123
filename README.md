@@ -4,10 +4,14 @@
 [![rank](https://make.fun/badge/news-image-20261123/andruu21/newsimg-20261123/rank.svg)](https://make.fun/bounty/news-image-20261123/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=news-image-20261123)
 [![reward](https://make.fun/badge/news-image-20261123/andruu21/newsimg-20261123/reward.svg)](https://make.fun/bounty/news-image-20261123?utm_source=github&utm_medium=readme&utm_campaign=news-image-20261123)
 
-Front page: 23 November 2026 world news in one newspaper image, drawn in code
-with Pillow (4x supersample, 1024x1024, byte-identical across runs, no
-network). Lead: Iran strikes on US bases in the Gulf; hero visual, stat band,
-section bands and outlet attributions (BBC / Al Jazeera / Guardian).
+A newspaper front page for Monday 23 November 2026, drawn entirely in code with
+Pillow: a masthead and dateline, a row of short kicker items, three lead
+stories with flat vector illustrations (Gulf strikes, Black Sea naval drones,
+the COP31 breakdown), a strip of briefs, an "also today" column and a
+"day at a glance" digest. The image is rendered offline at 1024x1024 with no
+network access and no external assets, and the finished result is committed as
+entry.png; the entrypoint is pure stdlib and simply serves that committed PNG
+to the output directory, so the image is byte-identical on every run.
 
 ## Run it
 
